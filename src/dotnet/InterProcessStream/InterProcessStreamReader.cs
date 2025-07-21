@@ -11,6 +11,10 @@ public class InterProcessStreamReader : Stream
     {
         this.sharedRegion = sharedRegion;
         this.capacity = capacity;
+        unsafe
+        {
+            sharedRegion.GetSharedState()->IsReaderConnected = true;
+        }
     }
 
     public override bool CanRead => true;
@@ -112,5 +116,20 @@ public class InterProcessStreamReader : Stream
     public override void Write(byte[] buffer, int offset, int count)
     {
         throw new InvalidOperationException();
+    }
+
+    public void WaitWriter()
+    {
+        // TODO: currently used for test only
+        unsafe
+        {
+            var sharedState = this.sharedRegion.GetSharedState();
+            SpinWait spinner = new();
+            while (!sharedState->IsWriterConnected)
+            {
+                spinner.SpinOnce();
+            }
+            return;
+        }
     }
 }

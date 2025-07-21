@@ -12,6 +12,10 @@ public class InterProcessStreamWriter : Stream
     {
         this.sharedRegion = sharedRegion;
         this.capacity = capacity;
+        unsafe
+        {
+            sharedRegion.GetSharedState()->IsWriterConnected = true;
+        }
     }
 
     public static InterProcessStreamWriter CreateAsHost(string hostName, long capacity)
@@ -106,6 +110,21 @@ public class InterProcessStreamWriter : Stream
                 count - dataSent
             );
             dataSent += dataWritten;
+        }
+    }
+
+    public void WaitReader()
+    {
+        // TODO: currently used for test only
+        unsafe
+        {
+            var sharedState = this.sharedRegion.GetSharedState();
+            SpinWait spinner = new();
+            while (!sharedState->IsReaderConnected)
+            {
+                spinner.SpinOnce();
+            }
+            return;
         }
     }
 }
