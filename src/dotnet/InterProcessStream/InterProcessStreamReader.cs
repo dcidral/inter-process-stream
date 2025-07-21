@@ -39,12 +39,23 @@ public class InterProcessStreamReader : Stream
         set => this.timeout = value;
     }
 
-    internal static InterProcessStreamReader CreateAsClient(string hostName)
+    /// <summary>
+    /// Creates a new <see cref="InterProcessStreamReader"/> as a client, connecting to an existing shared memory region.
+    /// </summary>
+    /// <param name="hostName">The name of the shared memory region.</param>
+    /// <returns>An <see cref="InterProcessStreamReader"/> instance connected as a client.</returns>
+    public static InterProcessStreamReader CreateAsClient(string hostName)
     {
         SharedRegion sharedRegion = SharedRegion.CreateClient(hostName);
         return new InterProcessStreamReader(sharedRegion, (long)sharedRegion.BufferSize);
     }
 
+    /// <summary>
+    /// Creates a new <see cref="InterProcessStreamReader"/> as a host, creating a new shared memory region.
+    /// </summary>
+    /// <param name="hostName">The name of the shared memory region.</param>
+    /// <param name="capacity">The capacity of the shared buffer.</param>
+    /// <returns>An <see cref="InterProcessStreamReader"/> instance connected as a host.</returns>
     public static InterProcessStreamReader CreateAsHost(string hostName, long capacity)
     {
         SharedRegion sharedRegion = SharedRegion.CreateHost(hostName, capacity);
