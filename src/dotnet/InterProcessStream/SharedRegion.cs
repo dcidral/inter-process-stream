@@ -51,7 +51,7 @@ public unsafe class SharedRegion : IDisposable
         this.sharedBuffer = sharedMemoryPointer + Marshal.SizeOf<SharedState>();
 
         this.readerSemaphore = new IPCSemaphore(&this.sharedState->readerSemaphore, false);
-        this.writerSemaphore = new IPCSemaphore(&this.sharedState->readerSemaphore, false);
+        this.writerSemaphore = new IPCSemaphore(&this.sharedState->writerSemaphore, false);
     }
 
     ~SharedRegion()
