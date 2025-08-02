@@ -1,8 +1,4 @@
 ﻿using InterProcessStream;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 namespace TestConsoleApp;
 
 public class RandomDataStreaming
@@ -22,6 +18,11 @@ public class RandomDataStreaming
 
     public void RunTest()
     {
+        string role = this.isSender ? "sender" : "receiver";
+        Console.WriteLine($"Starting transfer as {role}." +
+            $" Data Size: {this.dataSize}," +
+            $" Buffer Size: {this.bufferSize}"
+        );
         byte[] data = new byte[this.dataSize];
         DateTime start, end;
         if (this.isSender)
@@ -57,6 +58,6 @@ public class RandomDataStreaming
         TimeSpan duration = end - start;
         double transferRate = (this.dataSize / 1000000) / duration.TotalSeconds;
         Console.WriteLine($"{transferRate}mB/s");
-        Console.ReadLine();
+        Console.WriteLine($"Duration: {duration}");
     }
 }
