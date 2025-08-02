@@ -22,40 +22,21 @@ public enum StreamState
 [StructLayout(LayoutKind.Sequential)]
 public struct SharedState
 {
-    internal nuint bufferSize;
-    internal nuint currentWriterIndex;
-    internal nuint currentReaderIndex;
+    internal ulong bufferSize;
+    internal ulong currentWriterIndex;
+    internal ulong currentReaderIndex;
     internal StreamState streamState;
     internal byte writerSemaphore;
     internal byte readerSemaphore;
 
-    public nuint GetAvailableSpace()
-    {
-        nuint availableSpace;
-        if (currentReaderIndex <= currentWriterIndex)
+    public ulong GetAvailableData()
         {
-            nuint unreadData = currentWriterIndex - currentReaderIndex;
-            availableSpace = bufferSize - unreadData;
-        }
-        else
-        {
-            availableSpace = currentReaderIndex - currentWriterIndex;
-        }
-        // We can't write the current reader index, otherwise we won't know there are
-        // data to read.
-        return availableSpace - 1;
+        return (bufferSize + currentWriterIndex - currentReaderIndex) % bufferSize;
     }
 
-    public nuint GetAvailableData()
-    {
-        if (currentReaderIndex <= currentWriterIndex)
+    public ulong GetAvailableSpace()
         {
-            return currentWriterIndex - currentReaderIndex;
-        }
-        else
-        {
-            return currentWriterIndex + bufferSize - currentReaderIndex;
-        }
+        return (bufferSize - GetAvailableData()) - 1;
     }
 
     private bool IsState(StreamState state) => (this.streamState & state) == state;

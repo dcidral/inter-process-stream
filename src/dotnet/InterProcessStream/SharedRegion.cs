@@ -136,7 +136,7 @@ public unsafe class SharedRegion : IDisposable
             SharedState* sharedState = (SharedState*)sharedStatePointer;
             sharedState->currentReaderIndex = 0;
             sharedState->currentWriterIndex = 0;
-            sharedState->bufferSize = (nuint)bufferSize;
+            sharedState->bufferSize = (ulong)bufferSize;
         }
 
         return new SharedRegion(sharedFile, sharedMemoryAccesor);

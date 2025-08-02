@@ -10,13 +10,13 @@ public class TestSharedState
         public TestCaseData(SharedState sharedState, int availableSpace, int unreadData)
         {
             SharedState = sharedState;
-            AvailableSpace = (nuint)availableSpace;
-            AvailableData = (nuint)unreadData;
+            AvailableSpace = (ulong)availableSpace;
+            AvailableData = (ulong)unreadData;
         }
 
         public SharedState SharedState { get; }
-        public nuint AvailableSpace { get; }
-        public nuint AvailableData { get; }
+        public ulong AvailableSpace { get; }
+        public ulong AvailableData { get; }
     }
 
     public static IEnumerable<object[]> GetTestData()
