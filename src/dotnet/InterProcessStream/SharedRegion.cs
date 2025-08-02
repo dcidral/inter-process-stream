@@ -184,42 +184,41 @@ public unsafe class SharedRegion : IDisposable
     {
         AssertBufferSize(data, offset, count);
 
-        ulong dataCopied = 0;
-        ReadWriteInstructions instruction = new();
-
-        while (dataCopied < count && this.sharedState->GetAvailableSpace() > 0)
+        ulong totalDataCopied = 0;
+        while (totalDataCopied < count && this.sharedState->GetAvailableSpace() > 0)
         {
-            ulong distanceToEnd = this.sharedState->bufferSize - this.sharedState->currentWriterIndex;
-            ulong writeBlockSize = Math.Min(count - dataCopied, this.sharedState->GetAvailableSpace());
+            // Using a copy avoids issues with race conditions
+            SharedState stateSnapshot = *this.sharedState;
+            ulong dataOffset = totalDataCopied + offset;
+            ulong sharedBufferOffset = (stateSnapshot.currentWriterIndex + 1) % stateSnapshot.bufferSize;
+            ulong remainingData = Math.Min(count - totalDataCopied, stateSnapshot.GetAvailableSpace());
+            ulong copySize;
 
-            instruction.subjectOffset = offset + dataCopied;
-            if (distanceToEnd == 0)
+            if (sharedBufferOffset < stateSnapshot.currentReaderIndex)
             {
-                instruction.startIndex = 0;
-                instruction.count = writeBlockSize;
+                copySize = remainingData;
             }
             else
             {
-                instruction.startIndex = this.sharedState->currentWriterIndex;
-                instruction.count = Math.Min(writeBlockSize, distanceToEnd);
+                ulong distanceToEnd = stateSnapshot.bufferSize - sharedBufferOffset;
+                copySize = Math.Min(remainingData, distanceToEnd);
             }
 
-            fixed (byte* source = data)
+            fixed (byte* dataPtr = data)
             {
                 Buffer.MemoryCopy(
-                    source + instruction.subjectOffset,
-                    this.sharedBuffer + instruction.startIndex,
-                    instruction.count,
-                    instruction.count
+                    dataPtr + dataOffset,
+                    this.sharedBuffer + sharedBufferOffset,
+                    copySize,
+                    copySize
                 );
             }
-            this.sharedState->currentWriterIndex = (nuint)(instruction.startIndex + instruction.count);
-            dataCopied += instruction.count;
-
-            // TODO: should I move the timeout logic to the SharedRegion class?
+            
+            this.sharedState->currentWriterIndex = (this.sharedState->currentWriterIndex + copySize) % this.sharedState->bufferSize;
+            totalDataCopied += copySize;
             this.writerSemaphore.Signal();
         }
-        return dataCopied;
+        return totalDataCopied;
     }
 
     public unsafe ulong Read(byte[] readBuffer)
@@ -231,40 +230,43 @@ public unsafe class SharedRegion : IDisposable
     {
         AssertBufferSize(readBuffer, offset, count);
 
-        var instruction = new ReadWriteInstructions();
-        ulong dataCopied = 0;
-        while (dataCopied < count && this.GetSharedState()->GetAvailableData() > 0)
+        ulong totalDataCopied = 0;
+        while (totalDataCopied < count && this.GetSharedState()->GetAvailableData() > 0)
         {
-            ulong distanceToEnd = this.sharedState->bufferSize - this.sharedState->currentReaderIndex;
-            ulong dataToRead = Math.Min(count - dataCopied, this.sharedState->GetAvailableData());
-            ulong maxDataToRead = Math.Min(this.sharedState->GetAvailableData(), dataToRead);
-            instruction.startIndex = distanceToEnd > 0 ? this.sharedState->currentReaderIndex : 0;
-            if (this.sharedState->currentWriterIndex > instruction.startIndex)
+            // Using a copy avoids issues with race conditions
+            SharedState stateSnapshot = *this.sharedState;
+            ulong remainingReadSize = count - totalDataCopied;
+            ulong maxDataToRead = Math.Min(remainingReadSize, stateSnapshot.GetAvailableData());
+            ulong sharedBufferOffset = (stateSnapshot.currentReaderIndex + 1) % this.sharedState->bufferSize;
+            ulong copyCount;
+            if (sharedBufferOffset < stateSnapshot.currentWriterIndex)
             {
-                instruction.count = maxDataToRead;
+                copyCount = maxDataToRead;
             }
             else
             {
-                instruction.count = Math.Min(maxDataToRead, distanceToEnd);
+                ulong distanceToEnd = this.sharedState->bufferSize - sharedBufferOffset;
+                copyCount = Math.Min(maxDataToRead, distanceToEnd);
             }
 
             fixed (byte* readPointer = readBuffer)
             {
-                byte* destination = readPointer + offset + dataCopied;
-                ulong destinationSizeInBytes = (ulong)readBuffer.LongLength - (offset + dataCopied);
+                byte* destination = readPointer + offset + totalDataCopied;
+                ulong destinationSizeInBytes = (ulong)readBuffer.LongLength - (offset + totalDataCopied);
                 Buffer.MemoryCopy(
-                    this.sharedBuffer + instruction.startIndex,
+                    this.sharedBuffer + sharedBufferOffset,
                     destination,
                     destinationSizeInBytes,
-                    instruction.count
+                    copyCount
                 );
             }
-            this.sharedState->currentReaderIndex += (nuint)instruction.count;
-            dataCopied += instruction.count;
+
+            this.sharedState->currentReaderIndex = (this.sharedState->currentReaderIndex + copyCount) % this.sharedState->bufferSize;
+            totalDataCopied += copyCount;
 
             this.readerSemaphore.Signal();
         }
-        return dataCopied;
+        return totalDataCopied;
     }
 
     public bool WaitReader(TimeSpan timeout, CancellationToken cancelToken = default)
@@ -275,14 +277,6 @@ public unsafe class SharedRegion : IDisposable
     public bool WaitWriter(TimeSpan timeout, CancellationToken cancelToken = default)
     {
         return this.writerSemaphore.Wait(timeout, cancelToken);
-    }
-
-    struct ReadWriteInstructions
-    {
-        internal ulong startIndex;
-        internal ulong count;
-        // Subject is incoming data buffer when writing, or the outgoing data buffer when reading
-        internal ulong subjectOffset;
     }
 
     internal SharedState* GetSharedState()

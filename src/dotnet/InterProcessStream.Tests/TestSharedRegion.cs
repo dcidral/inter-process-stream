@@ -34,7 +34,7 @@ public class TestSharedRegion
             byte* sharedData = sharedRegion.GetSharedMemory();
             Marshal.Copy((byte[])[0, 0, 0, 0], 0, new nint(sharedData), 4);
 
-            Span<byte> sharedDataView = new Span<byte>(sharedData, 4);
+            Span<byte> sharedDataView = new Span<byte>(sharedData + 1, 4);
 
             Assert.IsTrue(sharedDataView.SequenceEqual((byte[])[0, 0, 0, 0]));
 
@@ -44,7 +44,7 @@ public class TestSharedRegion
 
             // Test write with offset
             sharedRegion.Write([9, 8, 7, 6, 5, 4, 3], 2, 4);
-            sharedDataView = new Span<byte>(sharedData + 4, 4);
+            sharedDataView = new Span<byte>(sharedData + 5, 4);
 
             Assert.IsTrue(sharedDataView.SequenceEqual((byte[])[7, 6, 5, 4]));
         }
@@ -102,7 +102,7 @@ public class TestSharedRegion
             // Internally, SharedRegion creates buffer with an additional position for the
             // current write and read index to rest
             var bufferData = new Span<byte>(buffer, capacity + 1);
-            byte[] expectedBufferData = [7, 8, 9, 10, 0, 1, 2, 3, 4, 5, 6];
+            byte[] expectedBufferData = [6, 7,8, 9, 10, 0, 1, 2, 3, 4, 5];
             Assert.IsTrue(bufferData.SequenceEqual(expectedBufferData));
         }
     }
@@ -147,6 +147,59 @@ public class TestSharedRegion
 
         byte[] expected = [1, 2, 3, 4, 0, 0, 0, 0, 0, 0];
         Assert.IsTrue(readBuffer.SequenceEqual(expected));
+    }
+
+    [TestMethod]
+    public unsafe void TestReadWriteIndexOverflow()
+    {
+        // Ensure the reader and writer index, after each Read and Write operation,
+        // does not point to a invalid position.
+        const int capacity = 10;
+        const string hostName = nameof(TestReadWriteIndexOverflow);
+        SharedRegion sharedRegion = SharedRegion.CreateHost(hostName, capacity);
+
+        void AssertIndexOk()
+        {
+            ulong actualBufferSize = sharedRegion.GetSharedState()->bufferSize;
+            Assert.IsTrue(sharedRegion.GetSharedState()->currentReaderIndex < actualBufferSize);
+            Assert.IsTrue(sharedRegion.GetSharedState()->currentWriterIndex < actualBufferSize);
+        }
+
+        void AssertFull()
+        {
+            Assert.AreEqual(0u, sharedRegion.AvailableSpace);
+            Assert.AreEqual(10u, sharedRegion.AvailableData);
+            AssertIndexOk();
+        }
+
+        void AssertEmpty()
+        {
+            Assert.AreEqual(10u, sharedRegion.AvailableSpace);
+            Assert.AreEqual(0u, sharedRegion.AvailableData);
+            AssertIndexOk();
+        }
+
+        byte[] readBuffer = new byte[10];
+        byte[] writeBuffer = Enumerable.Range(1, 10).Select(i => (byte)i).ToArray();
+
+        sharedRegion.Write(writeBuffer);
+
+        AssertFull();
+
+        sharedRegion.Read(readBuffer);
+
+        AssertEmpty();
+        
+        byte[] dataSent = Enumerable.Range(50, 10).Select(i => (byte)i).ToArray();
+        sharedRegion.Write(dataSent);
+
+        AssertFull();
+        ulong readCount = sharedRegion.Read(readBuffer);
+
+        AssertEmpty();
+
+        Assert.AreEqual(10u, readCount);
+        Assert.IsTrue(readBuffer.SequenceEqual(dataSent));
     }
 
     [TestMethod]

@@ -112,4 +112,24 @@ public class TestInterProcessStream
         Assert.IsTrue(task.Wait(timeout: TimeSpan.FromMilliseconds(200)));
         Assert.IsTrue(hasTimedOut);
     }
+
+    [TestMethod]
+    public void TestLargeTransfer()
+    {
+        const int capacity = 10;
+        const string hostName = nameof(TestLargeTransfer);
+        const int dataSize = 1000;
+
+        var streamWriter = InterProcessStreamWriter.CreateAsHost(hostName, capacity);
+        var streamReader = InterProcessStreamReader.CreateAsClient(hostName);
+
+        byte[] dataSent = Enumerable.Range(1, dataSize).Select(i => (byte)i).ToArray();
+        Task writeTask = Task.Run(() => { streamWriter.Write(dataSent); });
+
+        byte[] readBuffer = new byte[dataSize];
+        streamReader.ReadExactly(readBuffer);
+
+        writeTask.Wait(TimeSpan.FromSeconds(1));
+        Assert.IsTrue(readBuffer.SequenceEqual(dataSent));
+    }
 }
